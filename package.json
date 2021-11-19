@@ -1,0 +1,11 @@
+{
+  "name": "abmoods-ytid-caching",
+  "version": "1.0.0",
+  "description": "Youtube ID download for caching and improving search speed on acousticbrainz mood demo by MTG",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Jorge Marcos Fernandez",
+  "license": "ISC"
+}
