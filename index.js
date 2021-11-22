@@ -73,7 +73,6 @@ async function getAllSongs () {
 }
 
 async function downloadYoutubeID (song) {
-    console.info(`Downloading ${song.mbid}...`);
     let secondTerm = song.artist;
     if (!song.artist) secondTerm = song.album;
 
@@ -101,18 +100,6 @@ function getRandomWaitingTime() {
     return 500 + (Math.random() * 1000);
 }
 
-async function runRequests (song, songList) {
-    let ytData = await downloadYoutubeID(song);
-    writeToFile(song.mbid, ytData);
-    if (!song.next) {
-        return;
-    }
-
-    setTimeout( () => {
-        runRequests(songList[song.next], songList);
-    }, getRandomWaitingTime());
-}
-
 async function main () {
     try {
         await setupESBackup();
@@ -124,6 +111,22 @@ async function main () {
 
     // 1.a Retrieve all songs: mbid + metadata(title, artist, album)
     const songs = await getAllSongs();
+    const totalSongs = Object.entries(songs).length;
+    let counter = 0;
+
+    async function runRequests (song) {
+        console.info(`Downloading ${song.mbid}... (Status: ${counter}/${totalSongs})`);
+        let ytData = await downloadYoutubeID(song);
+        writeToFile(song.mbid, ytData);
+        if (!song.next) {
+            return;
+        }
+    
+        counter += 1;
+        setTimeout( () => {
+            runRequests(songs[song.next]);
+        }, getRandomWaitingTime());
+    }
 
     // 2. Iterate. For each song: a) search youtube and parse for yt ID; b) save to file; c) wait for ~2sec \
     await runRequests(songs[songs.start], songs);
