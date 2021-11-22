@@ -1,5 +1,6 @@
 const { Client } = require('@elastic/elasticsearch');
 const scraper = require('./scraper');
+const fs = require('fs');
 
 const esClient = new Client({ node: 'http://localhost:9200' });
 
@@ -44,22 +45,72 @@ async function getAllSongs () {
     });
 
     console.info(`Returned ${resp.body.hits.total.relation} ${resp.body.hits.total.value} results`);
-    return resp.body.hits.hits.map( (h) => {
-        return {
-            mbid: h["_id"],
-            title: h["_source"].metadata.tags.title,
-            artist: h["_source"].metadata.tags.artist,
-            album: h["_source"].metadata.tags.album
+
+    // Prepare data structure for iteration
+    let arr = resp.body.hits.hits;
+    let songs = {};
+    for (let i=0; i < 4; i++) { // temporary, only test with first 4 values
+        let h = arr[i];
+        let next;
+        if (i == 0) songs.start = h._id;
+        if (i == 3) { // !arr[i+1]
+            next = null;
+        } else {
+            next = arr[i+1]._id;
         }
-    });
+
+        if (i == 0) songs.start = h._id; 
+        songs[h._id] = {
+            mbid: h._id,
+            title: h._source.metadata.tags.title,
+            artist: h._source.metadata.tags.artist,
+            album: h._source.metadata.tags.album,
+            next: next
+        }
+    }
+
+    return songs;
 }
 
-async function downloadYoutubeID (songDetails) {
-    // use 'scraper.youtube(q, key, pageToken)'
+async function downloadYoutubeID (song) {
+    console.info(`Downloading ${song.mbid}...`);
+    let secondTerm = song.artist;
+    if (!song.artist) secondTerm = song.album;
+
+    let ytResponse = await scraper.youtube(`${song.title} ${secondTerm}`, null, null);
+    for (let item of ytResponse.results) {
+        if (item.hasOwnProperty('video')) { // grab first result that is a video
+            return {
+                id: item.video.id,
+                url: item.video.url
+            }
+        }
+    }
 }
 
-async function writeToFile (idMap) {
-    // write mbid -> ytid map to .csv
+
+function writeToFile (mbid, ytData) {
+    // save mbid -> ytdata info
+    let data = {mbid: mbid, youtube: ytData};
+    fs.writeFileSync(`results/${mbid}.json`, JSON.stringify(data));
+    console.info(`Saved ${mbid} to file`);
+}
+
+function getRandomWaitingTime() {
+    // value: 0.5 to 1.5 seconds
+    return 500 + (Math.random() * 1000);
+}
+
+async function runRequests (song, songList) {
+    let ytData = await downloadYoutubeID(song);
+    writeToFile(song.mbid, ytData);
+    if (!song.next) {
+        return;
+    }
+
+    setTimeout( () => {
+        runRequests(songList[song.next], songList);
+    }, getRandomWaitingTime());
 }
 
 async function main () {
@@ -71,14 +122,11 @@ async function main () {
         console.error(err);
     }
 
-    // 1. Retrieve all songs: mbid + metadata(title, artist, album)
+    // 1.a Retrieve all songs: mbid + metadata(title, artist, album)
     const songs = await getAllSongs();
-    const testArray = songs.slice(2);
 
-    // 2. Iterate. For each song: a) search youtube and parse for yt ID; b) save to file; c) wait for ~2sec 
-    for (let i=0; i < testArray.length; i++) {
-        
-    }
+    // 2. Iterate. For each song: a) search youtube and parse for yt ID; b) save to file; c) wait for ~2sec \
+    await runRequests(songs[songs.start], songs);
 }
 
 if (process.argv.length == 2) {
