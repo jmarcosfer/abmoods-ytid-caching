@@ -7,30 +7,26 @@ const esClient = new Client({ node: 'http://localhost:9200' });
 
 
 async function setupESBackup () {
-    let repositoryExists = false;
-    try {
-        const getResp = await esClient.snapshot.getRepository({
-            repository: 'acbrainz_backup'
-        });
-        repositoryExists = getResp.statusCode == 200 ? true : false;
-    } catch (err) {
-        await esClient.snapshot.createRepository({
-            repository: 'acbrainz_backup',
-            body: {
-                type: 'fs',
-                settings: {
-                    location: '/mnt/backups/'
-                }
+    const getResp = await esClient.snapshot.getRepository({
+        repository: 'acbrainz_backup'
+    });
+    let repositoryExists = getResp.statusCode == 200 ? true : false;
+
+    if (repositoryExists) return;
+    log.info('ES Repository didnt exist, creating...');
+    await esClient.snapshot.createRepository({
+        repository: 'acbrainz_backup',
+        body: {
+            type: 'fs',
+            settings: {
+                location: '/mnt/backups/'
             }
-        })
-    } finally {
-        if (!repositoryExists) {
-            await esClient.snapshot.restore({
-                repository: 'acbrainz_backup',
-                snapshot: 'snapshot_01_dyn_withapi'
-            });
         }
-    }
+    });
+    await esClient.snapshot.restore({
+        repository: 'acbrainz_backup',
+        snapshot: 'snapshot_01_dyn_withapi'
+    });
 }
 
 async function getAllSongs () {
@@ -60,7 +56,6 @@ async function getAllSongs () {
             next = arr[i+1]._id;
         }
 
-        if (i == 0) songs.start = h._id; 
         songs[h._id] = {
             mbid: h._id,
             title: h._source.metadata.tags.title,
@@ -107,13 +102,18 @@ async function main () {
         log.info('Successfully recovered Elasticsearch data from backup');
     } catch (err) {
         log.error(err)
+        log.info(`Couldn't set up Elasticsearch. Make sure the docker container is running.`);
+        return 1;
     }
 
     // 1.a Retrieve all songs: mbid + metadata(title, artist, album)
-    const songs = await getAllSongs();
-    const totalSongs = Object.entries(songs).length;
+    let songs, totalSongs;
+    try {
+        songs = await getAllSongs();
+        totalSongs = Object.entries(songs).length - 1; // songs obj contains a 'start' id property apart from each song obj
+    } catch (err) { log.error(err) }
+    
     let counter = 0;
-
     async function runRequests (song) {
         log.info(`Downloading ${song.mbid}... (Status: ${counter}/${totalSongs})`);
         let ytData = await downloadYoutubeID(song);
@@ -129,7 +129,9 @@ async function main () {
     }
 
     // 2. Iterate. For each song: a) search youtube and parse for yt ID; b) save to file; c) wait for ~2sec \
-    await runRequests(songs[songs.start], songs);
+    try {
+        await runRequests(songs[songs.start], songs);
+    } catch (err) { log.error(err) }
 }
 
 if (process.argv.length == 2) {
