@@ -1,8 +1,11 @@
 import request from 'request';
+import fs from 'fs';
+
+const packageJSON = JSON.parse(fs.readFileSync('package.json'));
 
 async function youtube(query, key, pageToken) {
     return new Promise((resolve, reject) => {
-        let json = { results: [], version: require('./package.json').version };
+        let json = { results: [], version: packageJSON.version };
 
         // Specify YouTube search url
         if (key) {
@@ -219,4 +222,4 @@ function comb(a, b) {
     return a + b.text;
 }
 
-export default youtube;
+export default {youtube: youtube};
