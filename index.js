@@ -1,6 +1,7 @@
-const { Client } = require('@elastic/elasticsearch');
-const scraper = require('./scraper');
-const fs = require('fs');
+import { Client } from '@elastic/elasticsearch';
+import scraper from './scraper.js';
+import fs from 'fs';
+import log from './logging.js';
 
 const esClient = new Client({ node: 'http://localhost:9200' });
 
@@ -44,7 +45,7 @@ async function getAllSongs () {
         _source: ["_id", "metadata.tags.title", "metadata.tags.artist", "metadata.tags.album"]
     });
 
-    console.info(`Returned ${resp.body.hits.total.relation} ${resp.body.hits.total.value} results`);
+    log.info(`Returned ${resp.body.hits.total.relation} ${resp.body.hits.total.value} results`);
 
     // Prepare data structure for iteration
     let arr = resp.body.hits.hits;
@@ -92,7 +93,7 @@ function writeToFile (mbid, ytData) {
     // save mbid -> ytdata info
     let data = {mbid: mbid, youtube: ytData};
     fs.writeFileSync(`results/${mbid}.json`, JSON.stringify(data));
-    console.info(`Saved ${mbid} to file`);
+    log.info(`Saved ${mbid} to file`);
 }
 
 function getRandomWaitingTime() {
@@ -103,10 +104,9 @@ function getRandomWaitingTime() {
 async function main () {
     try {
         await setupESBackup();
-        console.info('Successfully recovered Elasticsearch data from backup');
+        log.info('Successfully recovered Elasticsearch data from backup');
     } catch (err) {
-        console.error(`Elasticsearch backup couldn't be restored \n`);
-        console.error(err);
+        log.error(err)
     }
 
     // 1.a Retrieve all songs: mbid + metadata(title, artist, album)
@@ -115,7 +115,7 @@ async function main () {
     let counter = 0;
 
     async function runRequests (song) {
-        console.info(`Downloading ${song.mbid}... (Status: ${counter}/${totalSongs})`);
+        log.info(`Downloading ${song.mbid}... (Status: ${counter}/${totalSongs})`);
         let ytData = await downloadYoutubeID(song);
         writeToFile(song.mbid, ytData);
         if (!song.next) {

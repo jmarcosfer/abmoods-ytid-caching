@@ -1,4 +1,4 @@
-const request = require('request');
+import request from 'request';
 
 async function youtube(query, key, pageToken) {
     return new Promise((resolve, reject) => {
@@ -219,4 +219,4 @@ function comb(a, b) {
     return a + b.text;
 }
 
-module.exports.youtube = youtube;
+export default youtube;
