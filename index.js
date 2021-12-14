@@ -30,9 +30,10 @@ async function setupESBackup () {
 }
 
 async function getAllSongs () {
-    const resp = await esClient.search({
+    const scrollSearch = await esClient.helpers.scrollSearch({
         index: 'acbrainz_highlevel',
-        scroll: '1h',
+        scroll: '5m',
+        size: 10000,
         body: {
             query: {
                 match_all: {}
@@ -41,21 +42,32 @@ async function getAllSongs () {
         _source: ["_id", "metadata.tags.title", "metadata.tags.artist", "metadata.tags.album"]
     });
 
-    log.info(`Returned ${resp.body.hits.total.relation} ${resp.body.hits.total.value} results`);
+    let allHits = [];
+    let firstScroll = true;
+    let scrollCount = 0;
+    for await (const result of scrollSearch) {
+        if (firstScroll) {
+            log.info(`Returned ${result.body.hits.total.relation} ${result.body.hits.total.value} results`);
+            firstScroll = false;
+        }
+        scrollCount += 1;
+        log.info(`Scrolling through index... ${scrollCount}`);
+        allHits = allHits.concat(result.body.hits.hits);
+    }
 
     // Prepare data structure for iteration
-    let arr = resp.body.hits.hits;
     let songs = {};
-    for (let i=0; i < 4; i++) { // temporary, only test with first 4 values
-        let h = arr[i];
+    for (let i=0; i < allHits.length; i++) {
+        let h = allHits[i];
         let next;
         if (i == 0) songs.start = h._id;
-        if (i == 3) { // !arr[i+1]
+        if (!allHits[i+1]) { 
             next = null;
         } else {
-            next = arr[i+1]._id;
+            next = allHits[i+1]._id;
         }
 
+        if (!h._source.metadata) {log.info(`no metadata could be retrieved for document with mbid: ${h._id}`); continue};
         songs[h._id] = {
             mbid: h._id,
             title: h._source.metadata.tags.title,
@@ -115,6 +127,7 @@ async function main () {
     
     let counter = 0;
     async function runRequests (song) {
+        counter += 1;
         log.info(`Downloading ${song.mbid}... (Status: ${counter}/${totalSongs})`);
         let ytData = await downloadYoutubeID(song);
         writeToFile(song.mbid, ytData);
@@ -122,7 +135,6 @@ async function main () {
             return;
         }
     
-        counter += 1;
         setTimeout( () => {
             runRequests(songs[song.next]);
         }, getRandomWaitingTime());
@@ -130,6 +142,7 @@ async function main () {
 
     // 2. Iterate. For each song: a) search youtube and parse for yt ID; b) save to file; c) wait for ~2sec \
     try {
+        console.log('songs.start', songs.start);
         await runRequests(songs[songs.start], songs);
     } catch (err) { log.error(err) }
 }
