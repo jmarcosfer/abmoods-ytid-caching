@@ -1,32 +1,36 @@
 import { Client } from '@elastic/elasticsearch';
 import scraper from './scraper.js';
 import fs from 'fs';
+import path from 'path';
 import log from './logging.js';
 
 const esClient = new Client({ node: 'http://localhost:9200' });
 
 
 async function setupESBackup () {
-    const getResp = await esClient.snapshot.getRepository({
-        repository: 'acbrainz_backup'
-    });
-    let repositoryExists = getResp.statusCode == 200 ? true : false;
-
-    if (repositoryExists) return;
-    log.info('ES Repository didnt exist, creating...');
-    await esClient.snapshot.createRepository({
-        repository: 'acbrainz_backup',
-        body: {
-            type: 'fs',
-            settings: {
-                location: '/mnt/backups/'
+    let repositoryExists;
+    try {
+    	const getResp = await esClient.snapshot.getRepository({
+            repository: 'acbrainz_backup'
+        });
+        repositoryExists = getResp.statusCode == 200 ? true : false;
+    } catch (err) {
+        log.info('ES Repository didnt exist, creating...');
+        await esClient.snapshot.createRepository({
+            repository: 'acbrainz_backup',
+            body: {
+                type: 'fs',
+                settings: {
+                    location: '/mnt/backups/'
+                }
             }
-        }
-    });
-    await esClient.snapshot.restore({
-        repository: 'acbrainz_backup',
-        snapshot: 'snapshot_01_dyn_withapi'
-    });
+        });
+
+        await esClient.snapshot.restore({
+            repository: 'acbrainz_backup',
+            snapshot: 'snapshot_01_dyn_withapi'
+        });
+    }
 }
 
 async function getAllSongs () {
@@ -59,15 +63,24 @@ async function getAllSongs () {
     let songs = {};
     for (let i=0; i < allHits.length; i++) {
         let h = allHits[i];
+        if (!h._source.metadata) {log.info(`no metadata could be retrieved for document with mbid: ${h._id}`); continue};
         let next;
         if (i == 0) songs.start = h._id;
         if (!allHits[i+1]) { 
             next = null;
         } else {
-            next = allHits[i+1]._id;
+            let skipCount = 1;
+            next = allHits[i+skipCount]._id;
+            while (!allHits[i+skipCount]._source.metadata) {
+                skipCount++;
+                next = allHits[i+skipCount]._id;
+                if (!allHits[i+skipCount]) {
+                    next = null;
+                    break;
+                }
+            }
         }
 
-        if (!h._source.metadata) {log.info(`no metadata could be retrieved for document with mbid: ${h._id}`); continue};
         songs[h._id] = {
             mbid: h._id,
             title: h._source.metadata.tags.title,
@@ -128,10 +141,16 @@ async function main () {
     let counter = 0;
     async function runRequests (song) {
         counter += 1;
+        // check if song's already been downloaded
+        if (fs.existsSync(path.join(__dirname, `results/${song.mbid}.json`))) {
+            log.info(`Skipping ${song.mbid}, already exists.`);
+            return;
+        }
         log.info(`Downloading ${song.mbid}... (Status: ${counter}/${totalSongs})`);
         let ytData = await downloadYoutubeID(song);
         writeToFile(song.mbid, ytData);
         if (!song.next) {
+            log.info('Reached the end of the song list. Done!');
             return;
         }
     
