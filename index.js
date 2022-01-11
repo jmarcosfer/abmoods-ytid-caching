@@ -2,7 +2,11 @@ import { Client } from '@elastic/elasticsearch';
 import scraper from './scraper.js';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import log from './logging.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const esClient = new Client({ node: 'http://localhost:9200' });
 
@@ -63,7 +67,7 @@ async function getAllSongs () {
     let songs = {};
     for (let i=0; i < allHits.length; i++) {
         let h = allHits[i];
-        if (!h._source.metadata) {log.info(`no metadata could be retrieved for document with mbid: ${h._id}`); continue};
+        if (!h._source.metadata) {log.skip(`no metadata could be retrieved for document with mbid: ${h._id}`); continue};
         let next;
         if (i == 0) songs.start = h._id;
         if (!allHits[i+1]) { 
@@ -141,28 +145,36 @@ async function main () {
     let counter = 0;
     async function runRequests (song) {
         counter += 1;
+
+        const getNext = () => {
+            return new Promise((resolve) => {
+                setTimeout( async () => {
+                    await runRequests(songs[song.next]);
+                    resolve(0);
+                }, getRandomWaitingTime());
+            })
+        };
+
         // check if song's already been downloaded
         if (fs.existsSync(path.join(__dirname, `results/${song.mbid}.json`))) {
-            log.info(`Skipping ${song.mbid}, already exists.`);
-            return;
+            log.skip(`Skipping ${song.mbid}, already exists.`);
+            return await getNext();
         }
         log.info(`Downloading ${song.mbid}... (Status: ${counter}/${totalSongs})`);
         let ytData = await downloadYoutubeID(song);
         writeToFile(song.mbid, ytData);
         if (!song.next) {
             log.info('Reached the end of the song list. Done!');
-            return;
+            return 0;
         }
     
-        setTimeout( () => {
-            runRequests(songs[song.next]);
-        }, getRandomWaitingTime());
+        return await getNext();
     }
 
     // 2. Iterate. For each song: a) search youtube and parse for yt ID; b) save to file; c) wait for ~2sec \
     try {
         console.log('songs.start', songs.start);
-        await runRequests(songs[songs.start], songs);
+        await runRequests(songs[songs.start]);
     } catch (err) { log.error(err) }
 }
 
