@@ -1,4 +1,3 @@
-import { Client } from '@elastic/elasticsearch';
 import scraper from './scraper.js';
 import fs from 'fs';
 import path from 'path';
@@ -7,6 +6,12 @@ import log from './logging.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const previouslyDownloadedPath = path.join(__dirname, 'downloaded.json');
+let previouslyDownloadedIDs = null;
+if (fs.existsSync(previouslyDownloadedPath)) {
+    previouslyDownloadedIDs = JSON.parse(fs.readFileSync(previouslyDownloadedPath));
+}
 
 async function downloadYoutubeID (song) {
     let secondTerm = song.artist;
@@ -52,7 +57,7 @@ async function main () {
         if (!fs.existsSync(songsPath)) {
             throw new Error('songs-data.json file not found')
         }
-        songs = JSON.parse(fs.readFileSync(songsPath))
+        songs = JSON.parse(fs.readFileSync(songsPath));
         totalSongs = Object.entries(songs).length - 1; // songs obj contains a 'start' id property apart from each song obj
     } catch (err) { log.error(err) }
     
@@ -70,10 +75,11 @@ async function main () {
         };
 
         // check if song's already been downloaded
-        if (fs.existsSync(path.join(__dirname, `results/${song.mbid}.json`))) {
-            log.skip(`Skipping ${song.mbid}, already exists.`);
+        if (previouslyDownloadedIDs instanceof Array && previouslyDownloadedIDs.includes(song.mbid)) {
+            log.skip(`Skipping ${song.mbid}, it already exists.`);
             return await getNext();
         }
+
         log.info(`Downloading ${song.mbid}... (Status: ${counter}/${totalSongs})`);
         let ytData = await downloadYoutubeID(song);
         writeToFile(song.mbid, ytData);
