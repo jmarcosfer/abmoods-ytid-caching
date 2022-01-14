@@ -41,15 +41,6 @@ function getRandomWaitingTime() {
 }
 
 async function main () {
-    try {
-        await setupESBackup();
-        log.info('Successfully recovered Elasticsearch data from backup');
-    } catch (err) {
-        log.error(err)
-        log.info(`Couldn't set up Elasticsearch. Make sure the docker container is running.`);
-        return 1;
-    }
-
     // 1.a Retrieve all songs: mbid + metadata(title, artist, album)
     let songs, totalSongs;
     try {
