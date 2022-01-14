@@ -8,95 +8,6 @@ import log from './logging.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const esClient = new Client({ node: 'http://localhost:9200' });
-
-
-async function setupESBackup () {
-    let repositoryExists;
-    try {
-    	const getResp = await esClient.snapshot.getRepository({
-            repository: 'acbrainz_backup'
-        });
-        repositoryExists = getResp.statusCode == 200 ? true : false;
-    } catch (err) {
-        log.info('ES Repository didnt exist, creating...');
-        await esClient.snapshot.createRepository({
-            repository: 'acbrainz_backup',
-            body: {
-                type: 'fs',
-                settings: {
-                    location: '/mnt/backups/'
-                }
-            }
-        });
-
-        await esClient.snapshot.restore({
-            repository: 'acbrainz_backup',
-            snapshot: 'snapshot_01_dyn_withapi'
-        });
-    }
-}
-
-async function getAllSongs () {
-    const scrollSearch = await esClient.helpers.scrollSearch({
-        index: 'acbrainz_highlevel',
-        scroll: '5m',
-        size: 10000,
-        body: {
-            query: {
-                match_all: {}
-            }
-        },
-        _source: ["_id", "metadata.tags.title", "metadata.tags.artist", "metadata.tags.album"]
-    });
-
-    let allHits = [];
-    let firstScroll = true;
-    let scrollCount = 0;
-    for await (const result of scrollSearch) {
-        if (firstScroll) {
-            log.info(`Returned ${result.body.hits.total.relation} ${result.body.hits.total.value} results`);
-            firstScroll = false;
-        }
-        scrollCount += 1;
-        log.info(`Scrolling through index... ${scrollCount}`);
-        allHits = allHits.concat(result.body.hits.hits);
-    }
-
-    // Prepare data structure for iteration
-    let songs = {};
-    for (let i=0; i < allHits.length; i++) {
-        let h = allHits[i];
-        if (!h._source.metadata) {log.skip(`no metadata could be retrieved for document with mbid: ${h._id}`); continue};
-        let next;
-        if (i == 0) songs.start = h._id;
-        if (!allHits[i+1]) { 
-            next = null;
-        } else {
-            let skipCount = 1;
-            next = allHits[i+skipCount]._id;
-            while (!allHits[i+skipCount]._source.metadata) {
-                skipCount++;
-                next = allHits[i+skipCount]._id;
-                if (!allHits[i+skipCount]) {
-                    next = null;
-                    break;
-                }
-            }
-        }
-
-        songs[h._id] = {
-            mbid: h._id,
-            title: h._source.metadata.tags.title,
-            artist: h._source.metadata.tags.artist,
-            album: h._source.metadata.tags.album,
-            next: next
-        }
-    }
-
-    return songs;
-}
-
 async function downloadYoutubeID (song) {
     let secondTerm = song.artist;
     if (!song.artist) secondTerm = song.album;
@@ -111,7 +22,6 @@ async function downloadYoutubeID (song) {
         }
     }
 }
-
 
 function writeToFile (mbid, ytData) {
     // save mbid -> ytdata info
@@ -138,7 +48,11 @@ async function main () {
     // 1.a Retrieve all songs: mbid + metadata(title, artist, album)
     let songs, totalSongs;
     try {
-        songs = await getAllSongs();
+        let songsPath = path.join(__dirname, 'songs-data.json');
+        if (!fs.existsSync(songsPath)) {
+            throw new Error('songs-data.json file not found')
+        }
+        songs = JSON.parse(fs.readFileSync(songsPath))
         totalSongs = Object.entries(songs).length - 1; // songs obj contains a 'start' id property apart from each song obj
     } catch (err) { log.error(err) }
     
