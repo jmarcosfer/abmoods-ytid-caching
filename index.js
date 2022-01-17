@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import log from './logging.js';
+import { start } from 'repl';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,18 +51,19 @@ function getRandomWaitingTime() {
 
 async function main () {
     // Retrieve songs: mbid + metadata(title, artist, album)
-    let songs, totalSongs;
+    let songsData, totalSongs, songs;
     try {
         let songsPath = path.join(__dirname, 'songs-data.json');
         if (!fs.existsSync(songsPath)) {
             throw new Error('songs-data.json file not found')
         }
-        songs = JSON.parse(fs.readFileSync(songsPath));
-        totalSongs = songs.length;
-        const whichThird = [1, 2, 3].includes(process.argv[2]) ? process.argv[2] : 1; // default: get first third
+        songsData = JSON.parse(fs.readFileSync(songsPath));
+        totalSongs = songsData.length;
+        const whichThird = ['1', '2', '3'].includes(process.argv[2]) ? process.argv[2] : 1; // default: get first third
         const startIndex = Math.floor((totalSongs * (whichThird - 1) / 3));
         const endIndex = whichThird === 3 ? totalSongs : Math.floor((totalSongs * whichThird / 3));
-        songs = songs.slice(startIndex, endIndex);
+        log.info(`Selected third ${whichThird} goes from ${startIndex} to ${endIndex}`);
+        songs = songsData.slice(startIndex, endIndex);
     } catch (err) { log.error(err) }
     
     const delay = (delayTime) => {

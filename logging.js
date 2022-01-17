@@ -7,9 +7,9 @@ if (!fs.existsSync('logs')){
   fs.mkdirSync('logs');
 }
 
-var infoFile = fs.createWriteStream(path.join(__dirname, 'logs/info.log'), {flags : 'a'});
-var debugFile = fs.createWriteStream(path.join(__dirname, 'logs/debug.log'), {flags : 'a'});
-var skipFile = fs.createWriteStream(path.join(__dirname, 'logs/skip.log'), {flags : 'a'});
+var infoFile = fs.createWriteStream(path.join(__dirname, 'logs/info.log'), {flags : 'w'});
+var debugFile = fs.createWriteStream(path.join(__dirname, 'logs/debug.log'), {flags : 'w'});
+var skipFile = fs.createWriteStream(path.join(__dirname, 'logs/skip.log'), {flags : 'w'});
 var logStdOut = process.stdout;
 
 const log = {};
