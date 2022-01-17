@@ -81,7 +81,13 @@ async function main () {
             }
     
             log.info(`Downloading ${song.mbid}... (Status: ${counter}/${songs.length})`);
-            let ytData = await downloadYoutubeID(song);
+            let ytData;
+            try {
+                ytData = await downloadYoutubeID(song);
+            } catch (err) {
+                log.error(err);
+                continue;
+            }
             writeToFile(song.mbid, ytData);
             await delay(getRandomWaitingTime());
         }
