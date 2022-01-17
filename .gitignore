@@ -1,6 +1,6 @@
 node_modules
 backups
 package-lock.json
-results
+*results*
 logs
 /songs-data.json
