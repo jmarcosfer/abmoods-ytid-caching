@@ -62,7 +62,7 @@ async function getAllSongs () {
     }
 
     // Prepare data structure for iteration
-    let songs = {};
+    let songs = [];
     for (let i=0; i < allHits.length; i++) {
         let h = allHits[i];
         if (!h._source.metadata) {log.skip(`no metadata could be retrieved for document with mbid: ${h._id}`); continue};
@@ -83,13 +83,13 @@ async function getAllSongs () {
             }
         }
 
-        songs[h._id] = {
+        songs.push({
             mbid: h._id,
             title: h._source.metadata.tags.title,
             artist: h._source.metadata.tags.artist,
             album: h._source.metadata.tags.album,
             next: next
-        }
+        });
     }
 
     saveJSON(songs);

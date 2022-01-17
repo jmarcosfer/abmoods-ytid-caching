@@ -41,7 +41,7 @@ function getRandomWaitingTime() {
 }
 
 async function main () {
-    // 1.a Retrieve all songs: mbid + metadata(title, artist, album)
+    // Retrieve songs: mbid + metadata(title, artist, album)
     let songs, totalSongs;
     try {
         let songsPath = path.join(__dirname, 'songs-data.json');
@@ -49,46 +49,48 @@ async function main () {
             throw new Error('songs-data.json file not found')
         }
         songs = JSON.parse(fs.readFileSync(songsPath));
-        totalSongs = Object.entries(songs).length - 1; // songs obj contains a 'start' id property apart from each song obj
+        totalSongs = songs.length;
+        const whichThird = [1, 2, 3].includes(process.argv[2]) ? process.argv[2] : 1; // default: get first third
+        const startIndex = Math.floor((totalSongs * (whichThird - 1) / 3));
+        const endIndex = whichThird === 3 ? totalSongs : Math.floor((totalSongs * whichThird / 3));
+        songs = songs.slice(startIndex, endIndex);
     } catch (err) { log.error(err) }
     
+    const delay = (delayTime) => {
+        return new Promise(resolve => {
+            setTimeout(resolve, delayTime);
+        });
+    };
+
     let counter = 0;
-    async function runRequests (song) {
-        counter += 1;
-
-        const getNext = () => {
-            return new Promise((resolve) => {
-                setTimeout( async () => {
-                    await runRequests(songs[song.next]);
-                    resolve(0);
-                }, getRandomWaitingTime());
-            })
-        };
-
-        // check if song's already been downloaded
-        if (previouslyDownloadedIDs instanceof Array && previouslyDownloadedIDs.includes(song.mbid)) {
-            log.skip(`Skipping ${song.mbid}, it already exists.`);
-            return await getNext();
-        }
-
-        log.info(`Downloading ${song.mbid}... (Status: ${counter}/${totalSongs})`);
-        let ytData = await downloadYoutubeID(song);
-        writeToFile(song.mbid, ytData);
-        if (!song.next) {
-            log.info('Reached the end of the song list. Done!');
-            return 0;
-        }
+    async function runRequests () {
+        for (let song of songs) {
+            counter += 1;
+            // check if song's already been downloaded
+            if (previouslyDownloadedIDs instanceof Array && previouslyDownloadedIDs.includes(song.mbid)) {
+                log.skip(`Skipping ${song.mbid}, it already exists.`);
+                continue;
+            }
     
-        return await getNext();
+            log.info(`Downloading ${song.mbid}... (Status: ${counter}/${songs.length})`);
+            let ytData = await downloadYoutubeID(song);
+            writeToFile(song.mbid, ytData);
+            await delay(getRandomWaitingTime());
+        }
+        
+        log.info('Reached the end of the song list. Done!');
+        return 0;
     }
 
     // 2. Iterate. For each song: a) search youtube and parse for yt ID; b) save to file; c) wait for ~2sec \
     try {
-        console.log('songs.start', songs.start);
-        await runRequests(songs[songs.start]);
+        log.info('Starting download');
+        await runRequests();
     } catch (err) { log.error(err) }
 }
 
-if (process.argv.length == 2) {
+if (process.argv.length == 3) {
     main();
+} else {
+    console.error('Please provide an argument [1-3]: which 1/3 of the songs data you want to download.')
 }
