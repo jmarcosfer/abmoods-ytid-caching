@@ -7,10 +7,18 @@ import log from './logging.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const previouslyDownloadedPath = path.join(__dirname, 'downloaded.json');
+const resultsPath = path.join(__dirname, 'results');
 let previouslyDownloadedIDs = null;
-if (fs.existsSync(previouslyDownloadedPath)) {
-    previouslyDownloadedIDs = JSON.parse(fs.readFileSync(previouslyDownloadedPath));
+if (fs.existsSync(resultsPath)) {
+    previouslyDownloadedIDs = [];
+    const downloadedFiles = fs.readdirSync(resultsPath);
+    
+    for (let f of downloadedFiles) {
+        const name = f.split('.')[0] // take ID only
+        previouslyDownloadedIDs.push(name);
+    }
+
+    log.info(`Found ${downloadedFiles.length} already downloaded ids in /results directory.`);
 }
 
 async function downloadYoutubeID (song) {
