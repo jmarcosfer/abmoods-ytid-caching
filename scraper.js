@@ -61,8 +61,12 @@ async function youtube(query, key, pageToken) {
                         console.log(data);
                     }
 
-                    // Loop through all objects and parse data according to type
-                    parseJsonFormat(sectionLists, json);
+                    try {
+                        // Loop through all objects and parse data according to type
+                        parseJsonFormat(sectionLists, json);
+                    } catch (e) {
+                        reject(e);
+                    }
         
                     return resolve(json);
                 }
